@@ -10,6 +10,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/files")
@@ -52,12 +54,39 @@ public class FileController {
             FileMetadata metadata = fileService.getFileMetadata(filename);
             
             return ResponseEntity.ok()
-                    .contentType(MediaType.parseMediaType(metadata.getContentType()))
-                    .header(HttpHeaders.CONTENT_DISPOSITION, 
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
                             "attachment; filename=\"" + metadata.getOriginalFilename() + "\"")
+                    .header(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, must-revalidate")
+                    .header(HttpHeaders.PRAGMA, "no-cache")
+                    .header(HttpHeaders.EXPIRES, "0")
+                    .contentLength(metadata.getSize() != null ? metadata.getSize() : resource.contentLength())
                     .body(resource);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
+        }
+    }
+
+    @PostMapping("/upload/batch")
+    public ResponseEntity<?> uploadFilesBatch(
+            @RequestParam("files") List<MultipartFile> files,
+            @RequestParam(value = "folder", required = false) String folder
+    ) {
+        try {
+            if (files == null || files.isEmpty()) {
+                return ResponseEntity.badRequest().body("Не переданы файлы");
+            }
+
+            List<String> stored = fileService.uploadMany(folder, files);
+            return ResponseEntity.ok(Map.of(
+                    "message", "Файлы успешно загружены",
+                    "folder", folder == null ? "" : folder,
+                    "storedFilenames", stored,
+                    "count", stored.size()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Ошибка при множественной загрузке: " + e.getMessage());
         }
     }
 
